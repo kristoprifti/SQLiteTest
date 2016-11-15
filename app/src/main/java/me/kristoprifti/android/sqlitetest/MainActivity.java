@@ -1,12 +1,16 @@
 package me.kristoprifti.android.sqlitetest;
 
 import android.content.ContentResolver;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.net.Uri;
 import android.os.Bundle;
 import android.provider.ContactsContract;
+import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.design.widget.FloatingActionButton;
+import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -28,7 +32,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
     private ListView contactNames;
     private static final int REQUEST_CODE_READ_CONTACTS = 1;
-    private static boolean READ_CONTACTS_GRANTED = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,13 +45,11 @@ public class MainActivity extends AppCompatActivity {
         int hasReadContactPermission = ContextCompat.checkSelfPermission(this, READ_CONTACTS);
         Log.d(TAG, "onCreate: checkSelfPermission = " + hasReadContactPermission);
 
-        if(hasReadContactPermission == PackageManager.PERMISSION_GRANTED){
-            Log.d(TAG, "onCreate: permission granted");
-            READ_CONTACTS_GRANTED = true;
-        } else {
-            Log.d(TAG, "onCreate: requesting permission");
-            ActivityCompat.requestPermissions(this, new String[]{READ_CONTACTS}, REQUEST_CODE_READ_CONTACTS);
+        if(hasReadContactPermission != PackageManager.PERMISSION_GRANTED){
+            Log.d(TAG, "onCreate: requesting permissions");
+            ActivityCompat.requestPermissions(this, new String[] {READ_CONTACTS}, REQUEST_CODE_READ_CONTACTS);
         }
+
         /*SQLiteDatabase sqLiteDatabase = getBaseContext().openOrCreateDatabase("sqlite-test-1.db", MODE_PRIVATE, null);
         String sql = "DROP TABLE IF EXISTS contacts;";
         Log.d(TAG, "onCreate: sql = " + sql);
@@ -80,21 +81,44 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
                 Log.d(TAG, "onClick: starts");
-                String[] projection = {ContactsContract.Contacts.DISPLAY_NAME_PRIMARY};
-                ContentResolver contentResolver = getContentResolver();
-                Cursor cursor = contentResolver.query(ContactsContract.Contacts.CONTENT_URI,
-                        projection,
-                        null,
-                        null,
-                        ContactsContract.Contacts.DISPLAY_NAME_PRIMARY);
-                if(cursor != null){
-                    List<String> contacts = new ArrayList<>();
-                    while (cursor.moveToNext()){
-                        contacts.add(cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)));
+                if (ContextCompat.checkSelfPermission(MainActivity.this, READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                    String[] projection = {ContactsContract.Contacts.DISPLAY_NAME_PRIMARY};
+                    ContentResolver contentResolver = getContentResolver();
+                    Cursor cursor = contentResolver.query(ContactsContract.Contacts.CONTENT_URI,
+                            projection,
+                            null,
+                            null,
+                            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY);
+                    if (cursor != null) {
+                        List<String> contacts = new ArrayList<>();
+                        while (cursor.moveToNext()) {
+                            contacts.add(cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)));
+                        }
+                        cursor.close();
+                        ArrayAdapter<String> adapter = new ArrayAdapter<>(MainActivity.this, R.layout.contact_detail, R.id.name, contacts);
+                        contactNames.setAdapter(adapter);
                     }
-                    cursor.close();
-                    ArrayAdapter<String> adapter = new ArrayAdapter<>(MainActivity.this, R.layout.contact_detail, R.id.name, contacts);
-                    contactNames.setAdapter(adapter);
+                } else {
+                    Snackbar.make(view, "This app can't display your Contacts records unless you...", Snackbar.LENGTH_INDEFINITE)
+                            .setAction("Grant Access", new View.OnClickListener() {
+                                @Override
+                                public void onClick(View view) {
+                                    Log.d(TAG, "Snackbar onClick: starts");
+                                    if(ActivityCompat.shouldShowRequestPermissionRationale(MainActivity.this, READ_CONTACTS)){
+                                        Log.d(TAG, "Snackbar onClick: calling request permissions");
+                                        ActivityCompat.requestPermissions(MainActivity.this, new String[]{READ_CONTACTS}, REQUEST_CODE_READ_CONTACTS);
+                                    } else {
+                                        Log.d(TAG, "Snackbar onClick: launching settings");
+                                        Intent intent = new Intent();
+                                        intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                                        Uri uri = Uri.fromParts("package", MainActivity.this.getPackageName(), null);
+                                        Log.d(TAG, "Snackbar onClick: intent uri is " + uri.toString());
+                                        intent.setData(uri);
+                                        MainActivity.this.startActivity(intent);
+                                    }
+                                    Log.d(TAG, "Snackbar onClick: ends");
+                                }
+                            }).show();
                 }
                 Log.d(TAG, "fab onClick: ends");
             }
@@ -109,7 +133,6 @@ public class MainActivity extends AppCompatActivity {
             case REQUEST_CODE_READ_CONTACTS: {
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     Log.d(TAG, "onRequestPermissionsResult: permission granted");
-                    READ_CONTACTS_GRANTED = true;
                 } else {
                     Log.d(TAG, "onRequestPermissionsResult: permission refused");
                 }
